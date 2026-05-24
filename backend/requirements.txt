@@ -1,0 +1,14 @@
+fastapi 
+uvicorn 
+openai 
+python-dotenv
+langchain 
+langgraph
+langchain-openai
+langchain-groq
+spacy #Also seprately install spacy and download the model using: python -m spacy download en_core_web_sm
+sqlalchemy #ORM (Object Relational Mapper)
+psycopg2-binary  #PostgreSQL driver
+asyncpg #ASYNC PostgreSQL driver ; important for FastAPI performance.
+sentence-transformers 
+chromadb
