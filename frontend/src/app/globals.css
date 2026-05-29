@@ -57,7 +57,7 @@
 body {
   background: var(--bg-deepest);
   color: var(--foreground);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   overflow: hidden;
   height: 100vh;
 }

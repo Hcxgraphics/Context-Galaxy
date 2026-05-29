@@ -1,6 +1,7 @@
 import json
 import asyncio
 import httpx
+import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -72,6 +73,59 @@ async def get_all_chats(
     return result.scalars().all()
 
 
+def _classify_question_length(message: str) -> int:
+    """
+    Returns appropriate max_tokens based on question complexity.
+    Range: 80 (one-liner) to 1000 (deep explanation).
+    """
+    msg = message.strip().lower()
+
+    # Single fact / yes-no / confirmation questions → 1–2 sentences
+    one_liner_patterns = [
+        r"^(is|are|was|were|do|does|did|can|should|will|has|have)\b",
+        r"^(yes or no|true or false|how many|what year|who is|where is)",
+        r"\bright\??\s*$",   # ends with "right?" like "tough job right"
+        r"\bcorrect\??\s*$",
+        r"^(define|what does .+ mean|what is the meaning)",
+    ]
+    for pattern in one_liner_patterns:
+        if re.search(pattern, msg):
+            return 120
+
+    # Short explanation questions → paragraph
+    short_patterns = [
+        r"^(why|how come|what makes|what causes)",
+        r"^(give me an? example|name (a few|some)|list (a few|some))",
+        r"^(briefly|quickly|in short|tldr|summarize)",
+    ]
+    for pattern in short_patterns:
+        if re.search(pattern, msg):
+            return 300
+
+    # Comparison / analysis → medium
+    medium_patterns = [
+        r"\bvs\.?\b|\bversus\b|\bcompare\b|\bdifference between\b",
+        r"\bpros and cons\b|\badvantages\b|\bdisadvantages\b",
+        r"\bhow does .+ work\b|\bexplain\b",
+    ]
+    for pattern in medium_patterns:
+        if re.search(pattern, msg):
+            return 600
+
+    # Deep dive / teach me / comprehensive → full
+    deep_patterns = [
+        r"\b(deep dive|in depth|comprehensive|detailed|thorough)\b",
+        r"\b(teach me|walk me through|step by step|full guide)\b",
+        r"\b(everything about|all about|complete overview)\b",
+    ]
+    for pattern in deep_patterns:
+        if re.search(pattern, msg):
+            return 1000
+
+    # Default — moderate explanation
+    return 450
+
+
 async def stream_chat_response(
     db: AsyncSession,
     chat_id,
@@ -115,7 +169,19 @@ async def stream_chat_response(
     retrieved_context = ContextRetrieval.format_context_for_prompt(retrieved_nodes)
 
     # 4. Construct System Prompt combining core AI limits and personalized memories
-    system_prompt = f"""You are the core intelligence of Context Galaxy.
+    max_tokens = _classify_question_length(user_message)
+
+    # Add length instruction to system prompt
+    length_instruction = {
+        120:  "Answer in 1-2 sentences only. Be direct and concise.",
+        300:  "Answer in 2-4 sentences. Be clear but brief.",
+        600:  "Answer in 2-3 paragraphs. Cover the key points.",
+        1000: "Provide a thorough, structured explanation with examples.",
+    }.get(max_tokens, "Answer proportionally to the complexity of the question.")
+
+    system_prompt = f"""{length_instruction}
+
+You are the core intelligence of Context Galaxy.
 
 General encyclopedic knowledge is already stored in your parameters. You MUST customize and frame your answer purely around the following personalized user-specific intelligence (representing what they are learning, their goals, preferences, and trajectory):
 
@@ -149,8 +215,8 @@ CRITICAL INSTRUCTIONS:
     payload = {
         "model": "openai/gpt-4o-mini",
         "messages": messages_list,
-        "temperature": 0.2,
-        "max_tokens": 1000,
+        "temperature": 0.7,
+        "max_tokens": max_tokens,
         "stream": True
     }
 
@@ -259,7 +325,7 @@ async def update_context_graph(
         "extracted_intent": {},
         "retrieved_data": [],
         "retrieved_context": "",
-        "response_chunks": []
+        "response_chunks": [ai_message] if ai_message else []
     }
 
     try:

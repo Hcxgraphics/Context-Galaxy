@@ -17,9 +17,43 @@ async def analyze_intent_node(state: GalaxyState, config: RunnableConfig) -> Dic
         return {"extracted_intent": {"root_intent": "General Chat", "candidate_topics": []}}
 
     user_message = messages[-1].content
+    response_chunks = state.get("response_chunks", [])
+    ai_message = response_chunks[0] if response_chunks else ""
+
     try:
-        intent_data = await extract_root_intent(user_message)
-    except Exception:
+        from app.nlp.intent_extractor import IntentExtractor
+        extractor = IntentExtractor()
+
+        # Dual Extraction: User Message + Assistant Response (real topics live here)
+        user_result = await extractor.extract(user_message)
+        
+        assistant_result = None
+        if ai_message:
+            assistant_result = await extractor.extract(ai_message[:600])
+
+        all_topics = list(user_result.candidate_topics)
+        if assistant_result:
+            all_topics.extend(assistant_result.candidate_topics)
+
+        # Remove duplicates case-insensitively
+        seen = set()
+        unique_topics = []
+        for t in all_topics:
+            key = t.strip().lower()
+            if key not in seen:
+                seen.add(key)
+                unique_topics.append(t)
+
+        root = unique_topics[0] if unique_topics else "General Chat"
+        if root == "General Chat" and len(user_message) > 0:
+            root = user_message[:30] + "..." if len(user_message) > 30 else user_message
+
+        intent_data = {
+            "root_intent": root,
+            "candidate_topics": unique_topics
+        }
+    except Exception as e:
+        print(f"Error in analyze_intent_node: {e}")
         intent_data = {"root_intent": "General Chat", "candidate_topics": []}
 
     return {"extracted_intent": intent_data}

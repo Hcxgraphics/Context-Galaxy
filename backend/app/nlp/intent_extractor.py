@@ -5,67 +5,56 @@ from langchain_core.output_parsers import JsonOutputParser
 from app.core.llm import llm
 
 nlp = spacy.load("en_core_web_sm")
-
 parser = JsonOutputParser()
 
-prompt = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        """
-You are an AI intent extraction engine.
+EXTRACTION_PROMPT = """
+Extract the key topics from this text. Focus on:
+- Named entities: people, roles, places, organizations (e.g. "Prime Minister", "CrewAI", "LangGraph")
+- Core concepts being discussed (e.g. "decision making", "leadership", "RAG")
+- Specific technical or domain terms
 
-Your task:
-1. Identify the PRIMARY USER INTENT (1 to 3 keywords only) from the message.
-2. Extract candidate topics strictly from the current message in isolation. Focus on named entities, concrete subjects, tools, frameworks, and technical concepts.
+Text: "{text}"
 
-RULES:
-- Root intent must represent the user's actual learning or the task objective.
-- Extract what is ACTUALLY mentioned, not what is implied.
-- Do not filter candidate topics through the root intent or prior conversation context.
-- Include specific tool names such as CrewAI, LangGraph, AutoGen, LangChain, LlamaIndex, and concrete concepts such as RAG, embeddings, vector databases, memory systems, orchestration, and tool use.
-- Minimum 2 characters, maximum 40 characters per topic.
-- Return 2-5 candidate topics maximum.
-- Do NOT extract pronouns or generic words like "basics", "stuff", "things", "topics".
+Rules:
+- Capture "Prime Minister" even if only mentioned once — proper roles always qualify
+- Normalize to title case: "prime minister" → "Prime Minister"
+- Do NOT extract: filler words, pronouns, adjectives without nouns
+- Return 2-5 topics maximum, ranked by importance
 
-Return STRICT JSON format:
-{{
-    "root_intent": "...",
-    "candidate_topics": ["...", "..."]
-}}
+Return ONLY valid JSON, no other text:
+{{"candidate_topics": ["Topic One", "Topic Two"]}}
 """
-    ),
-    (
-        "human",
-        "Message: {message}"
-    )
+
+prompt_template = ChatPromptTemplate.from_messages([
+    ("system", EXTRACTION_PROMPT)
 ])
 
-chain = prompt | llm | parser
+extraction_chain = prompt_template | llm | parser
 
+class ExtractionResult:
+    def __init__(self, candidate_topics: list[str]):
+        self.candidate_topics = candidate_topics
 
-async def extract_root_intent(
-    user_message: str
-):
-     # -------- NLP PREPROCESSING --------
+class IntentExtractor:
+    async def extract(self, text: str) -> ExtractionResult:
+        try:
+            result = await extraction_chain.ainvoke({"text": text})
+            topics = result.get("candidate_topics", [])
+            # Return properly formatted strings
+            return ExtractionResult([str(t).strip() for t in topics if t])
+        except Exception as e:
+            print(f"Error during intent extraction: {e}")
+            return ExtractionResult([])
 
-    doc = nlp(user_message)
-
-    noun_phrases = [
-        chunk.text
-        for chunk in doc.noun_chunks
-    ]
-
-    entities = [
-        ent.text
-        for ent in doc.ents
-    ]
-
-    # -------- LLM SEMANTIC EXTRACTION --------
-
-    result = await chain.ainvoke({
-        "message": user_message,
-        "noun_phrases": noun_phrases,
-        "entities": entities
-    })
-
-    return result
+async def extract_root_intent(user_message: str):
+    extractor = IntentExtractor()
+    res = await extractor.extract(user_message)
+    # Generate a simple root intent from the first topic or message snippet
+    root = res.candidate_topics[0] if res.candidate_topics else "General Chat"
+    if root == "General Chat" and len(user_message) > 0:
+        root = user_message[:30] + "..." if len(user_message) > 30 else user_message
+        
+    return {
+        "root_intent": root,
+        "candidate_topics": res.candidate_topics
+    }

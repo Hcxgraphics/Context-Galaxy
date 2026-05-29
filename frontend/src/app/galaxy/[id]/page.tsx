@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Orbit,
@@ -51,6 +51,8 @@ interface EdgeItem {
 
 export default function GalaxyExplorer() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const viewMode = searchParams.get("view") || "focus";
   const chatId = params.id as string;
 
   const [chatTitle, setChatTitle] = useState("Loading Coordinates...");
@@ -75,8 +77,8 @@ export default function GalaxyExplorer() {
     const generatedStars = Array.from({ length: 80 }).map((_, i) => ({
       id: i,
       size: Math.random() * 1.5 + 0.5,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
+      left: Math.random() * 200,
+      top: Math.random() * 200,
       opacity: Math.random() * 0.7 + 0.3,
       duration: Math.random() * 3 + 2,
       delay: Math.random() * 4,
@@ -88,21 +90,50 @@ export default function GalaxyExplorer() {
   const fetchGalaxyData = async (activeChatId: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiBase}/context/${activeChatId}/graph`);
+      const response = await fetch(`${apiBase}/context/all/graph`);
       if (!response.ok) throw new Error("Failed to load galaxy structure");
       const data = await response.json();
-      setNodes(data.nodes || []);
-      setEdges(data.edges || []);
       
-      // Attempt to load chat details
+      // Fetch user's active sidebar chat history
       const chatsResponse = await fetch(`${apiBase}/chat/all`);
       if (chatsResponse.ok) {
         const chats = await chatsResponse.json();
-        const matched = chats.find((c: any) => c.id === activeChatId);
-        if (matched) setChatTitle(matched.title);
+        
+        // Filter out deleted chats from localStorage
+        const deletedIds = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("deleted_chat_ids") || "[]") : [];
+        const activeChats = (chats || []).filter((c: any) => !deletedIds.includes(c.id));
+        const activeChatIds = activeChats.map((c: any) => c.id);
+        
+        // Filter out nodes and galaxies that do not belong to active chat IDs
+        const filteredNodes = (data.nodes || []).filter((node: any) => 
+          node.data && activeChatIds.includes(node.data.chat_id)
+        );
+        
+        // Filter edges to only link active nodes
+        const activeNodeIds = filteredNodes.map((n: any) => n.id);
+        const filteredEdges = (data.edges || []).filter((edge: any) => 
+          activeNodeIds.includes(edge.source) && activeNodeIds.includes(edge.target)
+        );
+
+        setNodes(filteredNodes);
+        setEdges(filteredEdges);
+
+        if (activeChatId === "all" || viewMode === "all") {
+          setChatTitle("Knowledge Universe Map");
+        } else {
+          const matched = activeChats.find((c: any) => c.id === activeChatId);
+          if (matched) {
+            setChatTitle(matched.title);
+          }
+        }
+      } else {
+        setNodes([]);
+        setEdges([]);
       }
     } catch (err) {
       console.error("Error loading galaxy graph:", err);
+      setNodes([]);
+      setEdges([]);
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +143,7 @@ export default function GalaxyExplorer() {
     if (chatId) {
       fetchGalaxyData(chatId);
     }
-  }, [chatId]);
+  }, [chatId, viewMode]);
 
   // Find currently selected node representation
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -273,6 +304,8 @@ export default function GalaxyExplorer() {
           edges={edges}
           selectedNodeId={selectedNodeId}
           onSelectNode={setSelectedNodeId}
+          activeChatId={chatId}
+          viewMode={viewMode}
         />
 
         {/* BOTTOM INSPECTOR SHEET OVERLAY (Fades and slides open on-node click) */}

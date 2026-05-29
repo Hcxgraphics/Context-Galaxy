@@ -21,6 +21,70 @@ class SummaryOverride(BaseModel):
     summary: str
 
 
+@router.get("/all/graph")
+async def get_all_galaxy_graph(
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Fetch all context nodes
+    nodes_query = await db.execute(
+        select(ContextNode)
+    )
+    nodes = nodes_query.scalars().all()
+
+    node_ids = [node.id for node in nodes]
+
+    # 2. Fetch all edges linking these nodes
+    edges = []
+    if node_ids:
+        edges_query = await db.execute(
+            select(ContextEdge).where(
+                ContextEdge.source_node_id.in_(node_ids) &
+                ContextEdge.target_node_id.in_(node_ids)
+            )
+        )
+        edges = edges_query.scalars().all()
+
+    # Format nodes for React Flow
+    flow_nodes = []
+    for node in nodes:
+        flow_nodes.append({
+            "id": str(node.id),
+            "type": "planet" if node.node_type.upper() == "ROOT" else "moon",
+            "data": {
+                "label": node.label,
+                "priority": node.priority,
+                "is_active": node.is_active,
+                "summary": node.summary or f"User is engaged with {node.label}.",
+                "activation_score": node.activation_score,
+                "frequency_score": node.frequency_score,
+                "depth_level": node.depth_level,
+                "chat_id": str(node.chat_id)
+            },
+            "position": {"x": 0, "y": 0}
+        })
+
+    # Format edges
+    flow_edges = []
+    for edge in edges:
+        flow_edges.append({
+            "id": f"e-{edge.source_node_id}-{edge.target_node_id}",
+            "source": str(edge.source_node_id),
+            "target": str(edge.target_node_id),
+            "type": "orbit",
+            "animated": True,
+            "data": {
+                "relationship_type": edge.relationship_type,
+                "weight": edge.weight
+            }
+        })
+
+    return {
+        "nodes": flow_nodes,
+        "edges": flow_edges,
+        "candidates": []
+    }
+
+
 @router.get("/{chat_id}/graph")
 async def get_galaxy_graph(
     chat_id: UUID,

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Orbit,
   Sparkles,
@@ -50,123 +50,122 @@ interface ChatListItemProps {
 }
 
 const ChatListItem = ({ chat, isActive, onRename, onDelete }: ChatListItemProps) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(chat.title);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(chat.title);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Close on outside click
   useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsMenuOpen(false);
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
       }
     };
-    if (isMenuOpen) {
-      document.addEventListener("mousedown", handleOutsideClick);
-    }
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [isMenuOpen]);
+    // Use capture phase + slight delay so the opening click doesn't immediately close
+    const timer = setTimeout(() => {
+      document.addEventListener("mousedown", handler);
+    }, 10);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("mousedown", handler);
+    };
+  }, [menuOpen]);
 
   const handleSaveRename = async () => {
-    if (!editTitle.trim() || editTitle.trim() === chat.title) {
-      setIsEditing(false);
+    if (!draftName.trim() || draftName.trim() === chat.title) {
+      setRenaming(false);
       return;
     }
-    await onRename(chat.id, editTitle.trim());
-    setIsEditing(false);
+    await onRename(chat.id, draftName.trim());
+    setRenaming(false);
   };
 
-  if (isEditing) {
-    return (
-      <div className="w-full text-left py-1.5 px-3 rounded-lg text-xs flex items-center gap-1.5 border border-slate-700 bg-slate-950" onClick={(e) => e.stopPropagation()}>
-        <input
-          type="text"
-          value={editTitle}
-          onChange={(e) => setEditTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSaveRename();
-            if (e.key === "Escape") {
-              setEditTitle(chat.title);
-              setIsEditing(false);
-            }
-          }}
-          className="bg-transparent text-white outline-none w-full text-xs py-0.5 font-medium"
-          autoFocus
-        />
-        <button
-          onClick={handleSaveRename}
-          className="p-1 hover:bg-slate-800 text-emerald-400 rounded transition-colors"
-        >
-          <Check className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => setIsEditing(false)}
-          className="p-1 hover:bg-slate-800 text-rose-400 rounded transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div
-      className={`group w-full relative rounded-lg text-xs flex items-center justify-between border transition-all ${
-        isActive
-          ? "bg-primary/10 border-primary/20 text-white font-bold"
-          : "bg-transparent border-transparent hover:bg-slate-900/30 hover:text-slate-200"
-      }`}
-    >
-      <Link
-        href={`/chat/${chat.id}`}
-        className="flex-1 text-left py-2 px-3 flex items-center gap-2 min-w-0"
+    <div ref={containerRef} className="group relative w-full">
+      <div
+        className={`w-full text-left py-2 px-3 rounded-lg text-xs flex items-center justify-between border transition-all ${
+          isActive
+            ? "bg-primary/10 border-primary/20 text-white font-bold"
+            : "bg-transparent border-transparent hover:bg-slate-900/30 hover:text-slate-200"
+        }`}
       >
-        <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary-light" : "text-slate-600"}`} />
-        <span className="truncate pr-4">{chat.title}</span>
-      </Link>
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary-light" : "text-slate-600"}`} />
+          {renaming ? (
+            <input
+              autoFocus
+              value={draftName}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { handleSaveRename(); }
+                if (e.key === "Escape") { setDraftName(chat.title); setRenaming(false); }
+              }}
+              onBlur={handleSaveRename}
+              className="flex-1 bg-transparent border-b border-blue-500/50 text-xs text-slate-200 outline-none w-full"
+            />
+          ) : (
+            <Link
+              href={`/chat/${chat.id}`}
+              className="flex-1 text-left truncate text-xs text-slate-400 hover:text-slate-200 block"
+            >
+              {chat.title}
+            </Link>
+          )}
+        </div>
 
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 transition-opacity" ref={menuRef}>
+        {/* Vertical three-dot button — CLICK to toggle, NOT hover */}
         <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            setIsMenuOpen(!isMenuOpen);
+            setMenuOpen((o) => !o);
           }}
-          className="p-1 hover:bg-slate-850 text-slate-400 hover:text-white rounded-md transition-colors"
-          title="Chat options"
+          className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center transition-all cursor-pointer ${
+            menuOpen
+              ? "opacity-100 text-slate-300 bg-white/[0.08]"
+              : "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300"
+          }`}
         >
-          <MoreHorizontal className="w-3.5 h-3.5" />
+          {/* Vertical dots — 3 stacked circles */}
+          <svg width="3" height="13" viewBox="0 0 3 13" fill="currentColor">
+            <circle cx="1.5" cy="1.5" r="1.5" />
+            <circle cx="1.5" cy="6.5" r="1.5" />
+            <circle cx="1.5" cy="11.5" r="1.5" />
+          </svg>
         </button>
-
-        {isMenuOpen && (
-          <div className="absolute right-0 top-6 bg-slate-950 border border-slate-850 rounded-lg shadow-2xl py-1 z-30 min-w-[100px] text-left font-bold uppercase text-[8px] tracking-wider filter drop-shadow-[0_0_8px_rgba(0,0,0,0.5)]">
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsEditing(true);
-                setIsMenuOpen(false);
-              }}
-              className="w-full px-3 py-1.5 text-slate-300 hover:text-white hover:bg-slate-900 flex items-center gap-1.5 transition-colors"
-            >
-              <Pencil className="w-3 h-3 text-cyan-400" /> Rename
-            </button>
-            <button
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (confirm("Are you sure you want to delete this chat thread and all its nodes/messages? This cannot be undone.")) {
-                  await onDelete(chat.id);
-                }
-                setIsMenuOpen(false);
-              }}
-              className="w-full px-3 py-1.5 text-rose-400 hover:text-rose-300 hover:bg-slate-900 flex items-center gap-1.5 border-t border-slate-900 transition-colors"
-            >
-              <Trash2 className="w-3 h-3 text-rose-500" /> Delete
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Dropdown — absolutely positioned inside the sidebar bounds to avoid horizontal scrolling */}
+      {menuOpen && (
+        <div
+          className="absolute right-2 top-full mt-1 z-[100] w-40 bg-[#0a1535] border border-blue-900/50 rounded-xl shadow-2xl shadow-black/60 overflow-hidden py-1 text-left font-bold uppercase text-[8px] tracking-wider animate-fade-in"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => { setRenaming(true); setMenuOpen(false); }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-slate-300 hover:bg-blue-900/30 transition-colors text-left cursor-pointer"
+          >
+            <Pencil size={11} className="text-cyan-400" />
+            Rename galaxy
+          </button>
+          <div className="h-px bg-blue-900/30 mx-2 my-0.5" />
+          <button
+            onClick={async () => {
+              if (confirm("Are you sure you want to delete this chat thread and all its nodes/messages? This cannot be undone.")) {
+                await onDelete(chat.id);
+              }
+              setMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-rose-450 hover:bg-red-950/40 transition-colors text-left cursor-pointer"
+          >
+            <Trash2 size={11} className="text-rose-500" />
+            Delete galaxy
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -174,6 +173,7 @@ const ChatListItem = ({ chat, isActive, onRename, onDelete }: ChatListItemProps)
 export default function ChatThread() {
   const params = useParams();
   const chatId = params.id as string;
+  const router = useRouter();
 
   // Collapsible Sidebar States
   const [leftOpen, setLeftOpen] = useState(true);
@@ -235,7 +235,12 @@ export default function ChatThread() {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const historyData = await response.json();
-      setChatHistory(historyData);
+      
+      // Filter out deleted chats from localStorage
+      const deletedIds = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("deleted_chat_ids") || "[]") : [];
+      const filtered = (historyData || []).filter((chat: any) => !deletedIds.includes(chat.id));
+      
+      setChatHistory(filtered);
     } catch (err) {
       console.warn("Chat history unavailable:", err);
       setChatHistory([]); // graceful fallback — don't crash the UI
@@ -412,25 +417,54 @@ export default function ChatThread() {
         if (id === chatId) {
           setChatTitle(newTitle);
         }
+      } else {
+        throw new Error(`Server returned status ${response.status}`);
       }
     } catch (err) {
-      console.error("Error renaming chat thread:", err);
+      console.warn("Failed to rename chat on backend, falling back to local rename:", err);
+      // Fallback: update state locally so the user is not blocked
+      setChatHistory((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c))
+      );
+      if (id === chatId) {
+        setChatTitle(newTitle);
+      }
     }
   };
 
   const handleDeleteChat = async (id: string) => {
+    // Add to deleted_chat_ids in localStorage to keep it permanently deleted for this user
+    if (typeof window !== "undefined") {
+      try {
+        const deletedIds = JSON.parse(localStorage.getItem("deleted_chat_ids") || "[]");
+        if (!deletedIds.includes(id)) {
+          deletedIds.push(id);
+          localStorage.setItem("deleted_chat_ids", JSON.stringify(deletedIds));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    // Update local state immediately
+    setChatHistory((prev) => prev.filter((c) => c.id !== id));
+    
     try {
       const response = await fetch(`${apiBase}/chat/${id}`, {
         method: "DELETE"
       });
       if (response.ok) {
-        await fetchChatHistory();
         if (id === chatId) {
           window.location.href = "/";
         }
+      } else {
+        throw new Error(`Server returned status ${response.status}`);
       }
     } catch (err) {
-      console.error("Error deleting chat thread:", err);
+      console.warn("Failed to delete chat on backend, falling back to local delete:", err);
+      if (id === chatId) {
+        router.push("/");
+      }
     }
   };
 
@@ -442,7 +476,10 @@ export default function ChatThread() {
 
   return (
     <main className="relative w-full h-screen overflow-hidden flex bg-[#050816] text-slate-100">
-      <GalaxyBackground />
+      <GalaxyBackground speedMultiplier={0.15} />
+
+      {/* Dark overlay for chat visibility and contrast */}
+      <div className="absolute inset-0 bg-[#02050c]/70 pointer-events-none z-0 backdrop-blur-[0.5px]" />
 
       {/* COLUMN 1: LEFT SIDEBAR */}
       <aside 
@@ -455,7 +492,16 @@ export default function ChatThread() {
             {/* Header Action */}
             <div className="p-4 border-b border-slate-900 flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <Link
+                  href="/"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      sessionStorage.removeItem("landing_started");
+                    }
+                  }}
+                  className="flex items-center gap-2 hover:opacity-80 transition-all cursor-pointer text-left"
+                  title="Return to Landing Page"
+                >
                   <div className="relative w-7 h-7 flex items-center justify-center">
                     <Orbit className="absolute w-7 h-7 text-primary animate-spin-slow opacity-60" />
                     <Sparkles className="w-3.5 h-3.5 text-white" />
@@ -463,7 +509,7 @@ export default function ChatThread() {
                   <h1 className="text-xs font-black tracking-widest uppercase text-white bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                     Context Galaxy
                   </h1>
-                </div>
+                </Link>
                 <button
                   onClick={() => setLeftOpen(false)}
                   className="p-1 hover:bg-slate-850 text-slate-500 hover:text-white rounded-lg transition-all cursor-pointer border border-transparent hover:border-slate-800"
@@ -483,7 +529,7 @@ export default function ChatThread() {
               {/* ACTIVE ROUTE: Dedicated Open Galaxy Canvas route button */}
               <div className="relative w-full">
                 <Link
-                  href={`/galaxy/${chatId}`}
+                  href={`/galaxy/${chatId}?view=all`}
                   onMouseEnter={galaxyMapTooltip.onMouseEnter}
                   onMouseLeave={galaxyMapTooltip.onMouseLeave}
                   className="w-full mt-1 py-2 px-3 bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 hover:border-primary/60 text-white font-extrabold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(109,93,254,0.15)] animate-pulse"
@@ -560,7 +606,7 @@ export default function ChatThread() {
               </Link>
 
               <Link
-                href={`/galaxy/${chatId}`}
+                href={`/galaxy/${chatId}?view=all`}
                 className="w-7 h-7 rounded-lg bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 text-accent hover:border-primary/60 flex items-center justify-center transition-all animate-pulse shadow-md"
                 title="Open Galaxy Map"
               >
@@ -584,59 +630,45 @@ export default function ChatThread() {
       {/* COLUMN 2: CENTER WORKSPACE */}
       <div className="flex-1 h-full flex flex-col z-10 min-w-0 max-w-4xl mx-auto px-6 transition-all duration-300 ease-in-out">
         {/* Chat Thread Title Bar */}
-        <header className="bg-[#020917]/80 backdrop-blur-sm border-b border-slate-800/80 px-6 py-4 flex items-center justify-between shrink-0 rounded-b-xl select-none mt-2 shadow-[0_0_15px_rgba(0,0,0,0.3)]">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="text-slate-500 hover:text-slate-300 transition-colors p-1" title="Back to welcome">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div>
-              <span className="text-[8px] font-bold text-primary uppercase tracking-widest block mb-0.5">
-                Active Galaxy Orbit
-              </span>
-              <h1 className="text-xs font-black text-white uppercase tracking-wider truncate max-w-[280px]">
-                {chatTitle}
-              </h1>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Collapse Expand Toggles inside the Main Header */}
-            {!leftOpen && (
-              <button
-                onClick={() => setLeftOpen(true)}
-                className="p-1 hover:bg-slate-850 text-slate-500 hover:text-white rounded-lg border border-slate-850"
-                title="Expand Navigation Sidebar"
-              >
-                <PanelLeftOpen className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {!rightOpen && (
-              <button
-                onClick={() => setRightOpen(true)}
-                className="p-1 hover:bg-slate-850 text-slate-500 hover:text-white rounded-lg border border-slate-850 relative"
-                title="Expand Context Jar"
-              >
-                <PanelRightOpen className="w-3.5 h-3.5" />
-                {activeNodesCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-primary text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-[#020917]">
-                    {activeNodesCount}
-                  </span>
-                )}
-              </button>
-            )}
+        <header className="flex items-center gap-3 px-5 py-3.5 border-b border-blue-900/25 bg-[#050816]/60 backdrop-blur-sm mt-2 rounded-b-xl shadow-lg select-none">
+          {/* 1. Back arrow */}
+          <button 
+            onClick={() => router.back()}
+            className="text-slate-500 hover:text-slate-300 transition-colors p-1 cursor-pointer"
+            title="Back"
+          >
+            <ArrowLeft size={15} />
+          </button>
 
-            {/* Dedicated Galaxy Map Button */}
-            <Link
-              href={`/galaxy/${chatId}`}
-              className="py-1 px-2.5 bg-gradient-to-r from-blue-600/40 to-cyan-600/40 border border-blue-500/30 hover:border-blue-400 text-white font-extrabold rounded-lg text-[10px] flex items-center gap-1 transition-all hover:brightness-110 shadow-[0_0_8px_rgba(6,182,212,0.15)] cursor-pointer select-none"
-            >
-              <Compass className="w-3.5 h-3.5 text-cyan-400 animate-pulse" /> Galaxy Map
-            </Link>
-            
-            {/* Live Teal Pulse Indicator */}
-            <div className="text-[9px] font-bold text-slate-400 bg-slate-950/60 border border-slate-900 px-2 py-1 rounded flex items-center gap-1.5 shadow-inner">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse shadow-[0_0_8px_#2dd4bf]" /> Live Telemetry
+          {/* 2. Chat title */}
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] font-mono text-blue-700 tracking-widest uppercase mb-0.5">
+              Active Galaxy Orbit
             </div>
+            <h1 className="text-sm font-semibold text-slate-200 truncate">{chatTitle}</h1>
+          </div>
+
+          {/* 3. Right side — Galaxy Map + Live Telemetry ONLY */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-950/50 border border-teal-800/30 shadow-inner shrink-0 select-none">
+              <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse shadow-[0_0_8px_#2dd4bf]" />
+              <span className="text-[10px] text-teal-400 font-mono tracking-wide">
+                Live Telemetry
+              </span>
+            </div>
+
+            <button
+              onClick={() => router.push(`/galaxy/${chatId}?view=focus`)}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:bg-violet-600/30 transition-all text-xs font-semibold tracking-wide cursor-pointer shadow-md"
+            >
+              <div className="w-3.5 h-3.5 relative shrink-0">
+                {/* Clear orbit icon — 2 rings + center dot, no blur */}
+                <div className="absolute inset-0 rounded-full border border-violet-400/70" />
+                <div className="absolute inset-[3px] rounded-full border border-violet-300/50" />
+                <div className="absolute inset-[5px] rounded-full bg-violet-300/80" />
+              </div>
+              Galaxy Map
+            </button>
           </div>
         </header>
 

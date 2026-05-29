@@ -72,9 +72,39 @@ export default function ContextJarSidebar({
   onCollapse
 }: ContextJarSidebarProps) {
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
+  const [sidebarWidth, setSidebarWidth] = useState(288);
+  const isResizing = React.useRef(false);
+
+  const startResizing = (mouseDownEvent: React.MouseEvent) => {
+    isResizing.current = true;
+    mouseDownEvent.preventDefault();
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (mouseMoveEvent: MouseEvent) => {
+      if (!isResizing.current) return;
+      // Right sidebar: dragging left (smaller clientX) increases width
+      const newWidth = window.innerWidth - mouseMoveEvent.clientX;
+      // Min: 288px (current w-72 size), Max: 600px
+      if (newWidth >= 288 && newWidth <= 600) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Custom hook for delayed hover tooltips
-  const useDelayedTooltip = (text: string, delayMs = 2500) => {
+  const useDelayedTooltip = (text: string, delayMs = 1000) => {
     const [visible, setVisible] = useState(false);
     const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -101,8 +131,8 @@ export default function ContextJarSidebar({
     return { visible, onMouseEnter, onMouseLeave };
   };
 
-  const activeCoreTooltip = useDelayedTooltip("Active Core represents the currently activated semantic memories loaded into the system prompt.");
-  const deepSpaceTooltip = useDelayedTooltip("Deep Space represents the archived semantic memories that are persisted but currently bypassed in reasoning.");
+  const activeCoreTooltip = useDelayedTooltip("Currently active memory(context) loaded in the system .");
+  const deepSpaceTooltip = useDelayedTooltip("Archived or old memories that you talked about but is now not as relevant.");
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editSummaryText, setEditSummaryText] = useState("");
   const [updatingNodeId, setUpdatingNodeId] = useState<string | null>(null);
@@ -202,7 +232,17 @@ export default function ContextJarSidebar({
   };
 
   return (
-    <aside className="w-72 h-full flex flex-col bg-[#060e25] border-l border-blue-900/20 z-10 select-none text-slate-300 shrink-0">
+    <aside 
+      className="h-full flex flex-col bg-[#060e25] border-l border-blue-900/20 z-10 select-none text-slate-300 shrink-0 relative"
+      style={{ width: `${sidebarWidth}px` }}
+    >
+      {/* Resizable edge drag handle on the left border */}
+      <div
+        onMouseDown={startResizing}
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-violet-500/40 hover:shadow-[0_0_10px_rgba(139,92,246,0.3)] transition-all z-50 group flex items-center justify-center"
+      >
+        <div className="w-[1px] h-12 bg-blue-950/40 group-hover:bg-violet-400 transition-colors" />
+      </div>
       {/* Sidebar Header */}
       <div className="p-4 border-b border-slate-900 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -222,7 +262,7 @@ export default function ContextJarSidebar({
               <span>Add Moon</span>
             </button>
           )}
-          {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600" />}
+          {/* {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600" />} */}
           {onCollapse && (
             <button
               onClick={onCollapse}

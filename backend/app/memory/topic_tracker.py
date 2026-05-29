@@ -47,17 +47,34 @@ class TopicTracker:
         """
         normalized_new = new_label.strip().lower()
 
-        # ── Layer 1: Fuzzy / substring match ─────────────────────────────────
+        # ── Layer 1: Fuzzy / substring / acronym match ───────────────────────
         all_existing_labels = (
             [(c.topic, c) for c in existing_candidates] +
             [(n.label, n) for n in existing_nodes]
         )
+
+        def get_initials(s: str) -> str:
+            cleaned = s.replace("-", " ").replace("_", " ")
+            stop_words = {"of", "and", "the", "in", "for", "a", "an"}
+            words = [w for w in cleaned.split() if w and w not in stop_words]
+            if len(words) <= 1:
+                return ""
+            return "".join(w[0] for w in words)
+
+        normalized_new_initials = get_initials(normalized_new)
 
         for label, obj in all_existing_labels:
             normalized_existing = label.strip().lower()
 
             # Exact match after normalization
             if normalized_new == normalized_existing:
+                return True, obj
+
+            # Acronym / Initials match (e.g. BJP vs Bharatiya Janata Party, RAG vs Retrieval Augmented Generation)
+            normalized_exist_initials = get_initials(normalized_existing)
+            if (normalized_new_initials and normalized_new_initials == normalized_existing) or \
+               (normalized_exist_initials and normalized_exist_initials == normalized_new) or \
+               (normalized_new_initials and normalized_exist_initials and normalized_new_initials == normalized_exist_initials):
                 return True, obj
 
             # One is a substring of the other (e.g. "RAG" in "RAG pipeline")

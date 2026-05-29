@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import {
   Send,
   User,
@@ -11,8 +11,17 @@ import {
   Check,
   RefreshCw,
   Square,
-  Edit3
+  Edit3,
+  Paperclip,
+  Command,
+  X as XIcon
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Helper function for class merging to guarantee compilation without external libraries
+function cn(...inputs: any[]) {
+  return inputs.filter(Boolean).join(" ");
+}
 
 interface Message {
   id: string;
@@ -49,7 +58,7 @@ const CodeBlock = ({ language, code, isStreaming }: { language: string; code: st
         <span>{language || "code"}</span>
         <button
           onClick={handleCopy}
-          className="opacity-0 group-hover/code:opacity-100 transition-all text-slate-500 hover:text-cyan-400 p-0.5"
+          className="opacity-200 group-hover/code:opacity-100 transition-all text-slate-200 hover:text-cyan-400 p-0.5"
           title="Copy to clipboard"
         >
           {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -84,10 +93,49 @@ const MessageCopyButton = ({ content }: { content: string }) => {
     <button
       type="button"
       onClick={handleCopy}
-      className="absolute top-2 right-2 opacity-0 group-hover/bubble:opacity-100 transition-all text-slate-500 hover:text-cyan-400 bg-slate-950/80 hover:bg-slate-900 p-1.5 rounded-md border border-slate-800/80 backdrop-blur-sm z-20 cursor-pointer shadow-md"
+      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-mono transition-all text-slate-500 hover:text-slate-300 hover:bg-white/[0.075] border border-transparent hover:border-white/[0.07] cursor-pointer"
       title="Copy message"
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? (
+        <>
+          <Check size={10} className="text-teal-400" />
+          <span>copied</span>
+        </>
+      ) : (
+        <>
+          <Copy size={10} />
+          <span>copy</span>
+        </>
+      )}
+    </button>
+  );
+};
+
+const UserCopyButton = ({ content }: { content: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy user message:", err);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-slate-500 hover:text-slate-300 hover:bg-white/[0.06] active:scale-90 cursor-pointer flex items-center justify-center p-1.5 rounded-md"
+      title="Copy message"
+    >
+      {copied ? (
+        <Check size={12.5} className="text-teal-400" />
+      ) : (
+        <Copy size={12.5} />
+      )}
     </button>
   );
 };
@@ -114,6 +162,18 @@ export default function ChatPanel({
   const pendingLocalUserIdsRef = useRef<Set<string>>(new Set());
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  const [inputFocused, setInputFocused] = useState(false);
+  const [attachments, setAttachments] = useState<string[]>([]);
+
+  const handleAttachFile = () => {
+    const mockFileName = `context-source-${Math.floor(Math.random() * 1000)}.pdf`;
+    setAttachments((prev) => [...prev, mockFileName]);
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
 
   // Auto-resize textarea as content changes
   useEffect(() => {
@@ -448,12 +508,31 @@ export default function ChatPanel({
     void executeMessageStream(lastMessage.content);
   }, [chatId, messages, isSending]);
 
+  const handleRegenerate = async (assistantMsgId: string) => {
+    const idx = messages.findIndex((m) => m.id === assistantMsgId);
+    if (idx <= 0) return;
+
+    const precedingUserMsg = [...messages].slice(0, idx).reverse()
+      .find((m) => m.role === "user");
+    if (!precedingUserMsg) return;
+
+    // Stop current generation if active
+    handleStopGeneration();
+
+    // Remove assistant message and all messages after it
+    setMessages((prev) => prev.slice(0, idx));
+
+    // Re-submit the preceding user question
+    await executeMessageStream(precedingUserMsg.content);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || isSending) return;
 
     const userMsg = inputText.trim();
     setInputText("");
+    setAttachments([]);
 
     const newUserMessage: Message = {
       id: Math.random().toString(),
@@ -581,20 +660,59 @@ export default function ChatPanel({
                       </div>
                     </div>
                   ) : (
-                    <div
-                      className={`p-3.5 rounded-2xl border text-[15px] shadow-[0_4px_16px_rgba(0,0,0,0.2)] select-text leading-relaxed relative group/bubble ${
-                        isAi
-                          ? "bg-slate-950/40 border-slate-900 rounded-tl-none text-slate-100"
-                          : "bg-primary/5 border-primary/15 rounded-tr-none text-slate-100 shadow-[0_0_8px_rgba(109,93,254,0.03)]"
-                      }`}
-                    >
-                      <MessageCopyButton content={msg.content} />
-                      {msg.content === "" ? (
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase select-none">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Mapping memories...
+                    <div className={cn(
+                      "flex flex-col gap-1 max-w-[80%]",
+                      isAi ? "items-start" : "items-end"
+                    )}>
+                      <div
+                        className={`p-3.5 rounded-2xl border text-[15px] shadow-[0_4px_16px_rgba(0,0,0,0.2)] select-text leading-relaxed relative group/bubble ${
+                          isAi
+                            ? "bg-slate-950/80 border-slate-800/80 rounded-tl-none text-slate-100"
+                            : "bg-primary/15 border-primary/25 rounded-tr-none text-slate-100 shadow-[0_0_12px_rgba(109,93,254,0.05)]"
+                        }`}
+                      >
+                        {msg.content === "" ? (
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase select-none">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Mapping memories...
+                          </div>
+                        ) : (
+                          <>
+                            {formatMessageContent(msg.content, msg.isStreaming)}
+                            
+                            {/* Action row inside bubble — assistant messages only */}
+                            {isAi && (
+                              <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-white/[0.05] opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+                                {/* Copy button */}
+                                <MessageCopyButton content={msg.content} />
+                                
+                                {/* Regenerate — assistant messages only */}
+                                {!msg.isStreaming && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRegenerate(msg.id)}
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-mono transition-all text-slate-500 hover:text-blue-400 hover:bg-blue-900/20 border border-transparent hover:border-blue-800/30 cursor-pointer"
+                                    title="Regenerate response"
+                                  >
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                                      stroke="currentColor" strokeWidth="2.5"
+                                      strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                      <path d="M3 3v5h5" />
+                                    </svg>
+                                    regenerate
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Under-bubble copy icon trigger — user sent messages only */}
+                      {!isAi && msg.content !== "" && (
+                        <div className="flex justify-end px-2 select-none min-h-[14px]">
+                          <UserCopyButton content={msg.content} />
                         </div>
-                      ) : (
-                        formatMessageContent(msg.content, msg.isStreaming)
                       )}
                     </div>
                   )}
@@ -644,11 +762,55 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* Input Deck */}
+      {/* Input Deck (Enhanced unified space prompter card) */}
       <form
         onSubmit={handleSendMessage}
-        className="p-3 border border-slate-850 bg-slate-950/30 rounded-xl flex items-end gap-2.5 shadow-lg select-none mb-2"
+        className={cn(
+          "w-full relative backdrop-blur-2xl transition-all duration-300 ease-in-out select-none mb-3 mt-1 flex items-end gap-2 p-2 rounded-2xl border",
+          inputFocused
+            ? "border-violet-500 bg-slate-950/70 shadow-[0_0_22px_rgba(139,92,246,0.3)]"
+            : "border-violet-500/35 hover:border-violet-500/60 bg-slate-950/45 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+        )}
       >
+        {/* PDF / Context Sources drawer (floating above input) */}
+        <AnimatePresence>
+          {attachments.length > 0 && (
+            <motion.div
+              className="absolute bottom-full left-0 mb-2 flex gap-2 flex-wrap"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 5 }}
+            >
+              {attachments.map((file, index) => (
+                <motion.div
+                  key={index}
+                  className="flex items-center gap-2 text-[10px] bg-violet-950/90 border border-violet-850 py-1.5 px-3 rounded-lg text-violet-300 shadow-xl backdrop-blur-md"
+                >
+                  <span>{file}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(index)}
+                    className="text-white/40 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <XIcon className="w-3 h-3" />
+                  </button>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 1. Left Attach Button */}
+        <button
+          type="button"
+          onClick={handleAttachFile}
+          className="p-2.5 text-slate-400 hover:text-white hover:bg-white/[0.06] active:scale-90 transition-all duration-200 cursor-pointer shrink-0 rounded-full mb-0.5"
+          title="Attach Context Source"
+        >
+          <Paperclip className="w-4 h-4" />
+        </button>
+
+        {/* 2. Textarea */}
         <textarea
           ref={textareaRef}
           rows={1}
@@ -660,16 +822,30 @@ export default function ChatPanel({
               handleSendMessage(e);
             }
           }}
-          placeholder={isSending ? "Core is projecting response..." : "Type your learning goal..."}
-          className="flex-1 bg-[#060e25] border border-blue-900/40 focus:ring-1 focus:ring-blue-700/20 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-650 outline-none resize-none font-medium min-h-[38px] max-h-[200px] overflow-y-auto"
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          placeholder={isSending ? "Core is projecting response..." : "Ask Context Galaxy..."}
+          className="flex-1 bg-transparent border-none text-white/95 text-xs focus:outline-none placeholder:text-white/20 min-h-[38px] max-h-[200px] overflow-y-auto leading-relaxed py-2 px-1 resize-none font-medium"
           disabled={isSending}
         />
+
+        {/* 3. Send Icon Button on the far right */}
         <button
           type="submit"
           disabled={!inputText.trim() || isSending}
-          className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-r from-violet-700 to-blue-700 hover:brightness-110 active:brightness-95 text-white flex items-center justify-center transition-all disabled:from-slate-900 disabled:to-slate-900 disabled:text-slate-600 disabled:border disabled:border-slate-850 shadow-md cursor-pointer mb-0.5"
+          className={cn(
+            "w-8.5 h-8.5 shrink-0 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer mb-0.5 shadow-md",
+            inputText.trim()
+              ? "bg-violet-600 text-white hover:bg-violet-500 hover:scale-105 active:scale-90 shadow-[0_0_12px_rgba(139,92,246,0.4)]"
+              : "bg-white/[0.03] text-white/20 cursor-not-allowed border border-white/[0.03]"
+          )}
+          title="Send message"
         >
-          <Send className="w-3.5 h-3.5" />
+          {isSending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4" />
+          )}
         </button>
       </form>
     </div>
