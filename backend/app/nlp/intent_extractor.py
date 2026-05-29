@@ -15,21 +15,19 @@ prompt = ChatPromptTemplate.from_messages([
 You are an AI intent extraction engine.
 
 Your task:
-
 1. Identify the PRIMARY USER INTENT (1 to 3 keywords only) from the message.
-2. Generate a CLEAN ROOT CONTEXT.
-3. Extract SEMANTIC candidate topics.
+2. Extract candidate topics strictly from the current message in isolation. Focus on named entities, concrete subjects, tools, frameworks, and technical concepts.
 
 RULES:
-
-- Root intent must be concise and meaningful.
-- Do NOT extract pronouns like "me", "I", "you".
-- Do NOT extract generic words like "basics", "stuff", "things", "topics", "concepts" etc.
-- Root intent should represent the user's actual learning or the task objective.
-- Candidate topics should be semantic concepts.
+- Root intent must represent the user's actual learning or the task objective.
+- Extract what is ACTUALLY mentioned, not what is implied.
+- Do not filter candidate topics through the root intent or prior conversation context.
+- Include specific tool names such as CrewAI, LangGraph, AutoGen, LangChain, LlamaIndex, and concrete concepts such as RAG, embeddings, vector databases, memory systems, orchestration, and tool use.
+- Minimum 2 characters, maximum 40 characters per topic.
+- Return 2-5 candidate topics maximum.
+- Do NOT extract pronouns or generic words like "basics", "stuff", "things", "topics".
 
 Return STRICT JSON format:
-
 {{
     "root_intent": "...",
     "candidate_topics": ["...", "..."]
@@ -38,7 +36,7 @@ Return STRICT JSON format:
     ),
     (
         "human",
-        "{message}"
+        "Message: {message}"
     )
 ])
 

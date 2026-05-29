@@ -4,6 +4,7 @@ from datetime import datetime
 
 class ChatCreate(BaseModel):
     title: str
+    first_message: str
 
 class ChatResponse(BaseModel):
     id: UUID
@@ -11,4 +12,4 @@ class ChatResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        from_attributes = True  #Allows Pydantic to convert SQLAlchemy ORM objects to API responses

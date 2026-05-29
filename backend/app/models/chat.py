@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime
+from sqlalchemy import Column, String, DateTime , ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -17,4 +17,8 @@ class Chat(Base):
 
     messages = relationship("Message", back_populates="chat")
 
-    context_nodes = relationship("ContextNode", back_populates="chat")
+    root_context_id = Column(UUID(as_uuid=True), ForeignKey("context_nodes.id", use_alter=True, name="fk_chat_root_context"), nullable=True)
+
+    context_nodes = relationship("ContextNode", back_populates="chat", foreign_keys="[ContextNode.chat_id]")
+
+    root_context = relationship("ContextNode", foreign_keys=[root_context_id])

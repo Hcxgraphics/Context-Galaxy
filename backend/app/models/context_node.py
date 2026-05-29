@@ -4,7 +4,9 @@ from sqlalchemy import (
     Float,
     Boolean,
     ForeignKey,
-    DateTime
+    DateTime,
+    JSON,
+    Text
 )
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -42,8 +44,16 @@ class ContextNode(Base):
 
     is_active = Column(Boolean, default=True)
 
+    summary = Column(Text, nullable=True)
+
+    embedding = Column(JSON, nullable=True)
+
+    last_mentioned = Column(DateTime, default=datetime.utcnow)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    chat = relationship("Chat", back_populates="context_nodes")
+    chat = relationship("Chat", back_populates="context_nodes", foreign_keys=[chat_id])
 
-    parent = relationship("ContextNode", remote_side=[id])
+    parent = relationship("ContextNode", remote_side=[id], backref="children")
+
+    depth_level = Column(Float, default=0)
