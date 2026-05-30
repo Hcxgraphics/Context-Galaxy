@@ -36,11 +36,26 @@ async def create_chat(
     root_intent = intent_data["root_intent"]
     candidate_topics = intent_data["candidate_topics"]
 
+    # Set clean 2-3 word intent title
+    if not candidate_topics or root_intent == "General Chat":
+        clean_words = [w for w in first_message.split() if w.strip()]
+        fallback_title = " ".join(clean_words[:3]).title()
+        # strip punctuation
+        fallback_title = "".join(c for c in fallback_title if c.isalnum() or c.isspace() or c == "-")
+        new_chat.title = fallback_title if fallback_title.strip() else "New Galaxy"
+    else:
+        # Use LLM extracted entity/concept, capped to 4 words max
+        words = root_intent.split()
+        if len(words) > 4:
+            new_chat.title = " ".join(words[:3]).title()
+        else:
+            new_chat.title = root_intent.title()
+
     # STEP 4 — Create Root Context Planet
     root_node = await ContextService.create_root_context(
         db,
         new_chat.id,
-        root_intent
+        new_chat.title
     )
 
     # STEP 5 — Candidate topic persistence

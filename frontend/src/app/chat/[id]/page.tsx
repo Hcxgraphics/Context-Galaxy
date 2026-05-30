@@ -231,7 +231,7 @@ export default function ChatThread() {
     setHistoryLoading(true);
     try {
       const response = await fetch(`${apiBase}/chat/all`, {
-        signal: AbortSignal.timeout(5000), // don't hang forever
+        signal: AbortSignal.timeout(15000), // don't hang forever (generous for serverless DB cold starts)
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const historyData = await response.json();
