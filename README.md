@@ -15,6 +15,10 @@
 
 <br/>
 
+<p align="center">
+  <img src="assets/landing_page.gif" width="900"/>
+</p>
+
 > **Context Galaxy is not a chatbot.**
 > It's a graph-based AI memory system where topics crystallize into planets, conversations become galaxies, and your AI learns *you* over time.
 
