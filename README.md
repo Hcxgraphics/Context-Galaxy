@@ -43,6 +43,11 @@ Standard AI             Context Galaxy
 
 ## Core Features
 
+<p align="center">
+  <img src="assets/galaxy_Map.gif" width="900"/>
+</p>
+
+
 ### 🪐 Galaxy Visualization
 Built on **React Flow** with custom circular planet nodes, roots are large glowing violet spheres, branches are smaller blue moons, and candidates are dim proto-moons. Nodes are laid out by an orbital algorithm: root at cente with candidate nodes & branches at radius.
 
