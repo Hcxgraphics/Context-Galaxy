@@ -16,7 +16,7 @@
 <br/>
 
 > **Context Galaxy is not a chatbot.**
-> It's a graph-based AI memory system — topics crystallize into planets, conversations become galaxies, and your AI learns *you* over time.
+> It's a graph-based AI memory system where topics crystallize into planets, conversations become galaxies, and your AI learns *you* over time.
 
 </div>
 
@@ -24,7 +24,7 @@
 
 ## What Makes It Different
 
-Most AI tools pass raw chat history into the LLM context window. Context Galaxy builds a **semantic property graph** from your conversations instead — only storing what's user-specific and injecting only what's relevant. The LLM already knows general facts; this system only tracks *your* learning path, priorities, and evolving interests.
+Most AI tools pass raw chat history into the LLM context window. Context Galaxy builds a **semantic property graph** from your conversations instead only storing what's user-specific and injecting only what's relevant. The LLM already knows general facts; this system only tracks *your* learning path, priorities, and evolving interests.
 
 ```
 Standard AI             Context Galaxy
@@ -40,31 +40,40 @@ Standard AI             Context Galaxy
 ## Core Features
 
 ### 🪐 Galaxy Visualization
-Built on **React Flow** with custom circular planet nodes — roots are large glowing violet spheres, branches are smaller blue moons, and candidates are dim proto-moons. Nodes are laid out by an orbital algorithm: root at center, branches at radius 280, candidates at radius 400. No white box nodes — zero default React Flow styling.
+Built on **React Flow** with custom circular planet nodes, roots are large glowing violet spheres, branches are smaller blue moons, and candidates are dim proto-moons. Nodes are laid out by an orbital algorithm: root at cente with candidate nodes & branches at radius.
 
 ### 🧠 Graph-Based Semantic Memory
-Memory is stored as a **property graph in PostgreSQL** via **SQLAlchemy async ORM**. Each node carries a label, type (`root / branch / candidate`), priority, score, embedding vector, and `is_active` flag. Edges store the cosine similarity weight between connected concepts. Three isolated layers: raw message log → dynamic context graph → visual galaxy.
+Memory is stored as a **property graph in PostgreSQL** via **SQLAlchemy async ORM**. Each node carries a label, type (`root / branch / candidate`), priority, score, embedding vector, and `is_active` flag. 
+Edges store the cosine similarity weight between connected concepts. 
+Three isolated layers: 
+raw message log → dynamic context graph → visual galaxy.
 
 ### 🌱 Topic Crystallization Engine
-New topics start as **Candidates** — they don't enter memory until they've been meaningfully discussed. The system tracks `mention_count` per candidate. At **3 mentions** (raised to 5 in long chats), the candidate crystallizes into a full graph node, gets connected to the root planet with a weighted edge, and disappears from the forming moons list. This prevents graph explosion from casual one-off mentions.
+New topics start as **Candidates** — they don't enter memory until they've been meaningfully discussed by user frequently . The system tracks `mention_count` per candidate. At **3 mentions** (raised to 5 in long chats), the candidate topics crystallizes into a full graph node, gets connected to the root planet with a weighted edge, and disappears from the forming moons list. This prevents graph explosion from casual one-off mentions.
 
 ### 🔍 Semantic Deduplication
 Before tracking any new candidate, two checks run in sequence:
 
-1. **Fuzzy string match** — normalized comparison + substring containment catches `"RAG"` vs `"RAG pipeline"`, and Levenshtein distance ≤ 2 catches typos like `"retreival"`. If matched, increments the existing candidate instead of forking.
+1. **Fuzzy string match** : normalized comparison + substring containment catches `"RAG"` vs `"RAG pipeline"`, and Levenshtein distance ≤ 2 catches typos like `"retreival"`. If matched, increments the existing candidate instead of forking.
+
 2. **Embedding cosine similarity** — `sentence-transformers` generates a 384-dim vector for the new topic and compares it against all existing candidates. Similarity ≥ 0.82 treats them as the same concept.
 
 ### 📡 Dual-Source Intent Extraction
-Topics are extracted from **both the user message and the assistant response** (first 600 chars). This matters because casual user questions like *"Prime minister tough job right?"* have low noun density — but the assistant response contains the rich vocabulary (`"Prime Minister"`, `"policy making"`, `"leadership"`). Pipeline: **spaCy** for noun phrase chunking and NER → **Groq LLM** for semantic abstraction → structured JSON output.
+Topics are extracted from **both the user message and the assistant response** (first 600 chars). This matters because casual user questions like *"Prime minister tough job right?"* have low noun density, but the assistant response contains the rich vocabulary (`"Prime Minister"`, `"policy making"`, `"leadership"`). 
+Pipeline: **spaCy** for noun phrase chunking and NER → **Groq LLM** for semantic abstraction → structured JSON output.
 
 ### 📥 Context Jar Sidebar
-Real-time sidebar showing the live state of memory. **Active Core** tab shows crystallized nodes that are actively shaping LLM responses. **Deep Space** tab shows archived older nodes. **Forming Moons** section shows top-5 candidates by mention count with a live progress bar toward crystallization. Polls every 5 seconds. Per-node controls: priority (HIGH / MEDIUM / LOW), activate/deactivate, delete.
+Real time sidebar showing the live state of memory. 
+**Active Core** tab: Shows crystallized nodes that are actively shaping LLM responses. 
+**Deep Space** tab: shows archived older nodes. **Forming Moons**: Shows top5 candidates by mention count with a live progress bar that can turn into a subtopic node with active polling.
+Per node controls: Priority (HIGH / MEDIUM / LOW), activate/deactivate, delete.
 
 ### 💬 Streaming Chat with Adaptive Length
-Chat streams via **FastAPI SSE** (`StreamingResponse`, `text/event-stream`), with **httpx async streaming** to OpenRouter on the backend. Before each request, `max_tokens` is set based on question type — `120` for yes/no confirmations, up to `1000` for deep dives — using regex pattern classification. Includes inline message editing (trims history and regenerates), per-message copy, and a regenerate button.
+Chat streams via **FastAPI SSE** with **httpx async streaming** to OpenRouter on the backend. Before each request, `max_tokens` is set based on question type: `120` for yes/no confirmations, up to `1000` for deep dives using regex pattern classification. 
+Also includes inline message editing with per message copy button, and a regenerate option.
 
 ### 🗂️ Chat Management
-Left sidebar with full chat history. Per-chat three-dot vertical menu (click-toggle, not hover) for rename and cascade delete. Collapsible to a mini icon rail. Rename is inline with `Enter` to confirm.
+Left sidebar with a complete chat history inspired by modern day LLMs. With options for renaming and cascade deletion .
 
 ---
 
